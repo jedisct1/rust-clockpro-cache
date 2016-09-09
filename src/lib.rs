@@ -77,6 +77,26 @@ impl<K, V> ClockProCache<K, V>
         Ok(cache)
     }
 
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.count_cold + self.count_hot + self.count_test
+    }
+
+    #[inline]
+    pub fn recent_len(&self) -> usize {
+        self.count_hot
+    }
+
+    #[inline]
+    pub fn frequent_len(&self) -> usize {
+        self.count_cold
+    }
+
+    #[inline]
+    pub fn test_len(&self) -> usize {
+        self.count_test
+    }
+
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
         where Q: Hash + Eq,
               K: Borrow<Q>
