@@ -1,6 +1,10 @@
 [package]
 name = "clockpro-cache"
+description = "CLOCK-Pro cache replacement policy"
 version = "0.1.0"
+homepage = "https://github.com/jedisct1/rust-clockpro-cache"
+keywords = ["cache"]
+license = "MIT"
 authors = ["Frank Denis <github@pureftpd.org>"]
 
 [dependencies]
