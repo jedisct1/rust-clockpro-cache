@@ -295,6 +295,7 @@ mod token_ring {
             }
         }
 
+        #[allow(dead_code)]
         #[inline]
         pub fn len(&self) -> usize {
             self.slab.len()
