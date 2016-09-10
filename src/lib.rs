@@ -3,8 +3,9 @@ extern crate bitflags;
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::mem;
 use token_ring::{Token, TokenRing};
 
 bitflags! {
@@ -20,7 +21,7 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: *const K,
+    key: K,
     value: Option<V>,
     node_type: NodeType,
     phantom_k: PhantomData<K>,
@@ -30,7 +31,7 @@ pub struct ClockProCache<K, V> {
     capacity: usize,
     test_capacity: usize,
     cold_capacity: usize,
-    map: HashMap<K, Token>,
+    map: HashMap<KeyRef<K>, Token>,
     ring: TokenRing,
     slab: Vec<Node<K, V>>,
     hand_hot: Token,
@@ -112,10 +113,10 @@ impl<K, V> ClockProCache<K, V>
     }
 
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
-        where Q: Hash + Eq,
-              K: Borrow<Q>
+        where K: Borrow<Q>,
+              Q: Eq + Hash
     {
-        let token = match self.map.get(key) {
+        let token = match self.map.get(Qey::from_ref(key)) {
             None => return None,
             Some(&token) => token,
         };
@@ -131,7 +132,7 @@ impl<K, V> ClockProCache<K, V>
         where Q: Hash + Eq,
               K: Borrow<Q>
     {
-        let token = match self.map.get(key) {
+        let token = match self.map.get(Qey::from_ref(key)) {
             None => return None,
             Some(&token) => token,
         };
@@ -147,7 +148,7 @@ impl<K, V> ClockProCache<K, V>
         where Q: Hash + Eq,
               K: Borrow<Q>
     {
-        let token = match self.map.get(key) {
+        let token = match self.map.get(Qey::from_ref(key)) {
             None => return false,
             Some(&token) => token,
         };
@@ -155,15 +156,15 @@ impl<K, V> ClockProCache<K, V>
     }
 
     pub fn insert(&mut self, key: K, value: V) -> bool {
-        let token = match self.map.get(&key).cloned() {
+        let token = match self.map.get(&KeyRef { k: &key }).cloned() {
             None => {
                 let node = Node {
-                    key: &key,
+                    key: key,
                     value: Some(value),
                     node_type: NODETYPE_COLD,
                     phantom_k: PhantomData,
                 };
-                self.meta_add(key, node);
+                self.meta_add(node);
                 self.count_cold += 1;
                 self.inserted += 1;
                 return false;
@@ -184,21 +185,21 @@ impl<K, V> ClockProCache<K, V>
         self.count_test -= 1;
         self.meta_del(token);
         let node = Node {
-            key: &key,
+            key: key,
             value: Some(value),
             node_type: NODETYPE_HOT,
             phantom_k: PhantomData,
         };
-        self.meta_add(key, node);
+        self.meta_add(node);
         self.count_hot += 1;
         true
     }
 
-    fn meta_add(&mut self, key: K, node: Node<K, V>) {
+    fn meta_add(&mut self, node: Node<K, V>) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
         self.slab[token] = node;
-        self.map.insert(key, token);
+        self.map.insert(KeyRef { k: &self.slab[token].key }, token);
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -283,7 +284,7 @@ impl<K, V> ClockProCache<K, V>
             mentry.node_type.remove(NODETYPE_MASK);
             mentry.node_type.insert(NODETYPE_EMPTY);
             mentry.value = None;
-            self.map.remove(unsafe { &*mentry.key });
+            self.map.remove(Qey::from_ref(&mentry.key));
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
@@ -303,6 +304,47 @@ unsafe impl<K, V> Send for ClockProCache<K, V>
     where K: Send,
           V: Send
 {
+}
+
+unsafe impl<K, V> Sync for ClockProCache<K, V>
+    where K: Sync,
+          V: Sync
+{
+}
+
+struct KeyRef<K> {
+    k: *const K,
+}
+
+impl<K: Hash> Hash for KeyRef<K> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unsafe { (*self.k).hash(state) }
+    }
+}
+
+impl<K: PartialEq> PartialEq for KeyRef<K> {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { (*self.k).eq(&*other.k) }
+    }
+}
+
+impl<K: Eq> Eq for KeyRef<K> {}
+
+#[derive(Hash, PartialEq, Eq)]
+struct Qey<Q: ?Sized>(Q);
+
+impl<Q: ?Sized> Qey<Q> {
+    fn from_ref(q: &Q) -> &Self {
+        unsafe { mem::transmute(q) }
+    }
+}
+
+impl<K, Q: ?Sized> Borrow<Qey<Q>> for KeyRef<K>
+    where K: Borrow<Q>
+{
+    fn borrow(&self) -> &Qey<Q> {
+        Qey::from_ref(unsafe { (*self.k).borrow() })
+    }
 }
 
 mod token_ring {
@@ -421,18 +463,32 @@ mod token_ring {
 
 #[test]
 fn test_cache() {
-    let mut cache: ClockProCache<&str, &str> = ClockProCache::new(3).unwrap();
+    let mut cache = ClockProCache::new(3).unwrap();
     cache.insert("testkey", "testvalue");
-    assert!(cache.contains_key(&"testkey"));
+    assert!(cache.contains_key("testkey"));
     cache.insert("testkey2", "testvalue2");
-    assert!(cache.contains_key(&"testkey2"));
+    assert!(cache.contains_key("testkey2"));
     cache.insert("testkey3", "testvalue3");
-    assert!(cache.contains_key(&"testkey3"));
+    assert!(cache.contains_key("testkey3"));
     cache.insert("testkey4", "testvalue4");
-    assert!(cache.contains_key(&"testkey4"));
-    assert!(cache.contains_key(&"testkey3"));
-    assert!(!cache.contains_key(&"testkey2"));
+    assert!(cache.contains_key("testkey4"));
+    assert!(cache.contains_key("testkey3"));
+    assert!(!cache.contains_key("testkey2"));
     cache.insert("testkey", "testvalue");
-    assert!(cache.get_mut(&"testkey").is_some());
-    assert!(cache.get_mut(&"testkey-nx").is_none());
+    assert!(cache.get_mut("testkey").is_some());
+    assert!(cache.get_mut("testkey-nx").is_none());
+}
+
+#[test]
+fn test_recycle() {
+    let mut cache: ClockProCache<u64, u64> = ClockProCache::new(3).unwrap();
+    for i in 0..7 {
+        assert_eq!(cache.insert(i, i), false);
+    }
+    for i in 0..2 {
+        match cache.get(&i) {
+            None => {}
+            Some(x) => assert_eq!(*x, i),
+        }
+    }
 }
