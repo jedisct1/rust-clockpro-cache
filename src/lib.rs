@@ -83,7 +83,7 @@ impl<K, V> ClockProCache<K, V>
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.count_cold + self.count_hot + self.count_test
+        self.count_cold + self.count_hot
     }
 
     #[inline]
