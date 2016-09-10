@@ -20,7 +20,7 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: K,
+    key: *const K,
     value: Option<V>,
     node_type: NodeType,
     phantom_k: PhantomData<K>,
@@ -43,7 +43,7 @@ pub struct ClockProCache<K, V> {
 }
 
 impl<K, V> ClockProCache<K, V>
-    where K: Eq + Hash + Clone
+    where K: Eq + Hash
 {
     pub fn new(capacity: usize) -> Result<Self, &'static str> {
         Self::new_with_test_capacity(capacity, capacity)
@@ -144,7 +144,7 @@ impl<K, V> ClockProCache<K, V>
         let token = match self.map.get(&key).cloned() {
             None => {
                 let node = Node {
-                    key: key.clone(),
+                    key: &key,
                     value: Some(value),
                     node_type: NODETYPE_COLD,
                     phantom_k: PhantomData,
@@ -169,7 +169,7 @@ impl<K, V> ClockProCache<K, V>
         self.count_test -= 1;
         self.meta_del(token);
         let node = Node {
-            key: key.clone(),
+            key: &key,
             value: Some(value),
             node_type: NODETYPE_HOT,
             phantom_k: PhantomData,
@@ -268,7 +268,7 @@ impl<K, V> ClockProCache<K, V>
             mentry.node_type.remove(NODETYPE_MASK);
             mentry.node_type.insert(NODETYPE_EMPTY);
             mentry.value = None;
-            self.map.remove(&mentry.key);
+            self.map.remove(unsafe { &*mentry.key });
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
