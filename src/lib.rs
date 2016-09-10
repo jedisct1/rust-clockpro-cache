@@ -151,7 +151,7 @@ impl<K, V> ClockProCache<K, V>
                 };
                 self.meta_add(key, node);
                 self.count_cold += 1;
-                return true;
+                return false;
             }
             Some(token) => token,
         };
@@ -160,7 +160,7 @@ impl<K, V> ClockProCache<K, V>
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NODETYPE_REFERENCE);
-                return false;
+                return true;
             }
         }
         if self.cold_capacity < self.capacity {
@@ -176,7 +176,7 @@ impl<K, V> ClockProCache<K, V>
         };
         self.meta_add(key, node);
         self.count_hot += 1;
-        false
+        true
     }
 
     fn meta_add(&mut self, key: K, node: Node<K, V>) {
