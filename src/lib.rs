@@ -39,6 +39,8 @@ pub struct ClockProCache<K, V> {
     count_hot: usize,
     count_cold: usize,
     count_test: usize,
+    inserted: u64,
+    evicted: u64,
     phantom_k: PhantomData<K>,
 }
 
@@ -72,6 +74,8 @@ impl<K, V> ClockProCache<K, V>
             count_hot: 0,
             count_cold: 0,
             count_test: 0,
+            inserted: 0,
+            evicted: 0,
             phantom_k: PhantomData,
         };
         Ok(cache)
@@ -95,6 +99,16 @@ impl<K, V> ClockProCache<K, V>
     #[inline]
     pub fn test_len(&self) -> usize {
         self.count_test
+    }
+
+    #[inline]
+    pub fn inserted(&self) -> u64 {
+        self.inserted
+    }
+
+    #[inline]
+    pub fn evicted(&self) -> u64 {
+        self.evicted
     }
 
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
@@ -151,6 +165,7 @@ impl<K, V> ClockProCache<K, V>
                 };
                 self.meta_add(key, node);
                 self.count_cold += 1;
+                self.inserted += 1;
                 return false;
             }
             Some(token) => token,
@@ -280,6 +295,7 @@ impl<K, V> ClockProCache<K, V>
             self.hand_test = self.ring.prev_for_token(self.hand_test);
         }
         self.ring.remove(token);
+        self.evicted += 1;
     }
 }
 
