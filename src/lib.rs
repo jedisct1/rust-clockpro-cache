@@ -44,12 +44,6 @@ pub struct ClockProCache<K, V> {
     phantom_k: PhantomData<K>,
 }
 
-unsafe impl<K, V> Send for ClockProCache<K, V>
-    where K: Send,
-          V: Send
-{
-}
-
 impl<K, V> ClockProCache<K, V>
     where K: Eq + Hash
 {
@@ -303,6 +297,12 @@ impl<K, V> ClockProCache<K, V>
         self.ring.remove(token);
         self.evicted += 1;
     }
+}
+
+unsafe impl<K, V> Send for ClockProCache<K, V>
+    where K: Send,
+          V: Send
+{
 }
 
 mod token_ring {
