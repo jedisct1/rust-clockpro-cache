@@ -396,3 +396,21 @@ mod token_ring {
         }
     }
 }
+
+#[test]
+fn test_cache() {
+    let mut cache: ClockProCache<&str, &str> = ClockProCache::new(3).unwrap();
+    cache.insert("testkey", "testvalue");
+    assert!(cache.contains_key(&"testkey"));
+    cache.insert("testkey2", "testvalue2");
+    assert!(cache.contains_key(&"testkey2"));
+    cache.insert("testkey3", "testvalue3");
+    assert!(cache.contains_key(&"testkey3"));
+    cache.insert("testkey4", "testvalue4");
+    assert!(cache.contains_key(&"testkey4"));
+    assert!(cache.contains_key(&"testkey3"));
+    assert!(!cache.contains_key(&"testkey2"));
+    cache.insert("testkey", "testvalue");
+    assert!(cache.get_mut(&"testkey").is_some());
+    assert!(cache.get_mut(&"testkey-nx").is_none());
+}
