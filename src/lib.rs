@@ -317,12 +317,14 @@ struct KeyRef<K> {
 }
 
 impl<K: Hash> Hash for KeyRef<K> {
+    #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
         unsafe { (*self.k).hash(state) }
     }
 }
 
 impl<K: PartialEq> PartialEq for KeyRef<K> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         unsafe { (*self.k).eq(&*other.k) }
     }
@@ -334,6 +336,7 @@ impl<K: Eq> Eq for KeyRef<K> {}
 struct Qey<Q: ?Sized>(Q);
 
 impl<Q: ?Sized> Qey<Q> {
+    #[inline]
     fn from_ref(q: &Q) -> &Self {
         unsafe { mem::transmute(q) }
     }
@@ -342,6 +345,7 @@ impl<Q: ?Sized> Qey<Q> {
 impl<K, Q: ?Sized> Borrow<Qey<Q>> for KeyRef<K>
     where K: Borrow<Q>
 {
+    #[inline]
     fn borrow(&self) -> &Qey<Q> {
         Qey::from_ref(unsafe { (*self.k).borrow() })
     }
