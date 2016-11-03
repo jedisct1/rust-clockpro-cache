@@ -89,12 +89,12 @@ impl<K, V> ClockProCache<K, V>
 
     #[inline]
     pub fn recent_len(&self) -> usize {
-        self.count_hot
+        self.count_cold
     }
 
     #[inline]
     pub fn frequent_len(&self) -> usize {
-        self.count_cold
+        self.count_hot
     }
 
     #[inline]
