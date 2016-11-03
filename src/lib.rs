@@ -167,7 +167,7 @@ impl<K, V> ClockProCache<K, V>
                 self.meta_add(node);
                 self.count_cold += 1;
                 self.inserted += 1;
-                return false;
+                return true;
             }
             Some(token) => token,
         };
@@ -176,7 +176,7 @@ impl<K, V> ClockProCache<K, V>
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NODETYPE_REFERENCE);
-                return true;
+                return false;
             }
         }
         if self.cold_capacity < self.capacity {
@@ -487,7 +487,7 @@ fn test_cache() {
 fn test_recycle() {
     let mut cache: ClockProCache<u64, u64> = ClockProCache::new(3).unwrap();
     for i in 0..7 {
-        assert_eq!(cache.insert(i, i), false);
+        assert_eq!(cache.insert(i, i), true);
     }
     for i in 0..2 {
         match cache.get(&i) {
