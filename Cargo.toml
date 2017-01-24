@@ -1,11 +1,16 @@
 [package]
 name = "clockpro-cache"
 description = "CLOCK-Pro cache replacement policy"
-version = "0.1.4"
+version = "0.1.5"
 homepage = "https://github.com/jedisct1/rust-clockpro-cache"
 keywords = ["cache"]
 license = "MIT"
 authors = ["Frank Denis <github@pureftpd.org>"]
+categories = ["algorithms", "caching"]
+
+[badges]
+travis-ci = { repository = "jedisct1/rust-clockpro-cache" }
+appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
 slab = "~0.3.0"
