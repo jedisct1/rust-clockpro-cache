@@ -46,15 +46,17 @@ pub struct ClockProCache<K, V> {
 }
 
 impl<K, V> ClockProCache<K, V>
-    where K: Eq + Hash
+where
+    K: Eq + Hash,
 {
     pub fn new(capacity: usize) -> Result<Self, &'static str> {
         Self::new_with_test_capacity(capacity, capacity)
     }
 
-    pub fn new_with_test_capacity(capacity: usize,
-                                  test_capacity: usize)
-                                  -> Result<Self, &'static str> {
+    pub fn new_with_test_capacity(
+        capacity: usize,
+        test_capacity: usize,
+    ) -> Result<Self, &'static str> {
         if capacity < 3 {
             return Err("Cache size cannot be less than 3 entries");
         }
@@ -113,8 +115,9 @@ impl<K, V> ClockProCache<K, V>
     }
 
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
-        where K: Borrow<Q>,
-              Q: Eq + Hash
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash,
     {
         let token = match self.map.get(Qey::from_ref(key)) {
             None => return None,
@@ -129,8 +132,9 @@ impl<K, V> ClockProCache<K, V>
     }
 
     pub fn get<Q: ?Sized>(&mut self, key: &Q) -> Option<&V>
-        where Q: Hash + Eq,
-              K: Borrow<Q>
+    where
+        Q: Hash + Eq,
+        K: Borrow<Q>,
     {
         let token = match self.map.get(Qey::from_ref(key)) {
             None => return None,
@@ -145,8 +149,9 @@ impl<K, V> ClockProCache<K, V>
     }
 
     pub fn contains_key<Q: ?Sized>(&mut self, key: &Q) -> bool
-        where Q: Hash + Eq,
-              K: Borrow<Q>
+    where
+        Q: Hash + Eq,
+        K: Borrow<Q>,
     {
         let token = match self.map.get(Qey::from_ref(key)) {
             None => return false,
@@ -301,14 +306,16 @@ impl<K, V> ClockProCache<K, V>
 }
 
 unsafe impl<K, V> Send for ClockProCache<K, V>
-    where K: Send,
-          V: Send
+where
+    K: Send,
+    V: Send,
 {
 }
 
 unsafe impl<K, V> Sync for ClockProCache<K, V>
-    where K: Sync,
-          V: Sync
+where
+    K: Sync,
+    V: Sync,
 {
 }
 
@@ -343,7 +350,8 @@ impl<Q: ?Sized> Qey<Q> {
 }
 
 impl<K, Q: ?Sized> Borrow<Qey<Q>> for KeyRef<K>
-    where K: Borrow<Q>
+where
+    K: Borrow<Q>,
 {
     #[inline]
     fn borrow(&self) -> &Qey<Q> {
