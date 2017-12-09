@@ -204,7 +204,12 @@ where
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
         self.slab[token] = node;
-        self.map.insert(KeyRef { k: &self.slab[token].key }, token);
+        self.map.insert(
+            KeyRef {
+                k: &self.slab[token].key,
+            },
+            token,
+        );
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -270,7 +275,10 @@ where
         if self.hand_test == self.hand_cold {
             self.run_hand_cold();
         }
-        if self.slab[self.hand_test].node_type.intersects(NODETYPE_TEST) {
+        if self.slab[self.hand_test]
+            .node_type
+            .intersects(NODETYPE_TEST)
+        {
             let prev = self.ring.prev_for_token(self.hand_test);
             let hand_test = self.hand_test;
             self.meta_del(hand_test);
@@ -442,10 +450,7 @@ mod token_ring {
                     prev: TOKEN_THUMBSTONE,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab
-                    .insert(node)
-                    .ok()
-                    .expect("Slab full");
+                let token = self.slab.insert(node).ok().expect("Slab full");
                 self.head = token;
                 self.tail = token;
                 return token;
@@ -458,10 +463,7 @@ mod token_ring {
                     prev: old_second,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab
-                    .insert(node)
-                    .ok()
-                    .expect("Slab full");
+                let token = self.slab.insert(node).ok().expect("Slab full");
                 self.slab[old_second].next = token;
                 self.tail = token;
                 token
@@ -470,10 +472,7 @@ mod token_ring {
                     prev: old_second,
                     next: to,
                 };
-                let token = self.slab
-                    .insert(node)
-                    .ok()
-                    .expect("Slab full");
+                let token = self.slab.insert(node).ok().expect("Slab full");
                 self.slab[old_second].next = token;
                 self.slab[to].prev = token;
                 token
