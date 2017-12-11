@@ -1,3 +1,6 @@
+#![cfg_attr(feature = "clippy", feature(plugin))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
+
 #[macro_use]
 extern crate bitflags;
 
@@ -87,6 +90,11 @@ where
     #[inline]
     pub fn len(&self) -> usize {
         self.count_cold + self.count_hot
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     #[inline]
