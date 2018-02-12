@@ -390,7 +390,7 @@ mod token_ring {
     pub struct TokenRing {
         head: Token,
         tail: Token,
-        slab: Slab<Node, Token>,
+        slab: Slab<Node>,
     }
 
     impl TokenRing {
@@ -457,7 +457,7 @@ mod token_ring {
                     prev: TOKEN_THUMBSTONE,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab.insert(node).ok().expect("Slab full");
+                let token = self.slab.insert(node);
                 self.head = token;
                 self.tail = token;
                 return token;
@@ -470,7 +470,7 @@ mod token_ring {
                     prev: old_second,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab.insert(node).ok().expect("Slab full");
+                let token = self.slab.insert(node);
                 self.slab[old_second].next = token;
                 self.tail = token;
                 token
@@ -479,7 +479,7 @@ mod token_ring {
                     prev: old_second,
                     next: to,
                 };
-                let token = self.slab.insert(node).ok().expect("Slab full");
+                let token = self.slab.insert(node);
                 self.slab[old_second].next = token;
                 self.slab[to].prev = token;
                 token
