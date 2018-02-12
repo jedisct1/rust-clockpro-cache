@@ -1,3 +1,5 @@
+[![dependency status](https://deps.rs/repo/github/jedisct1/rust-clockpro-cache/status.svg)](https://deps.rs/repo/github/jedisct1/rust-clockpro-cache)
+
 rust-clockpro-cache
 ===================
 CLOCK-Pro cache replacement algorithm for Rust
