@@ -12,14 +12,13 @@ use std::mem;
 use token_ring::{Token, TokenRing};
 
 bitflags! {
-    flags NodeType: u8 {
-        const NODETYPE_EMPTY     = 0b00001,
-        const NODETYPE_HOT       = 0b00010,
-        const NODETYPE_COLD      = 0b00100,
-        const NODETYPE_TEST      = 0b01000,
-        const NODETYPE_MASK      =
-        NODETYPE_EMPTY.bits | NODETYPE_HOT.bits | NODETYPE_COLD.bits | NODETYPE_TEST.bits,
-        const NODETYPE_REFERENCE = 0b10000
+    struct NodeType: u8 {
+        const EMPTY     = 0b00001;
+        const HOT       = 0b00010;
+        const COLD      = 0b00100;
+        const TEST      = 0b01000;
+        const MASK      = Self::EMPTY.bits | Self::HOT.bits | Self::COLD.bits | Self::TEST.bits;
+        const REFERENCE = 0b10000;
     }
 }
 
@@ -135,7 +134,7 @@ where
         if node.value.is_none() {
             return None;
         }
-        node.node_type.insert(NODETYPE_REFERENCE);
+        node.node_type.insert(NodeType::REFERENCE);
         Some(node.value.as_mut().unwrap())
     }
 
@@ -152,7 +151,7 @@ where
         if node.value.is_none() {
             return None;
         }
-        node.node_type.insert(NODETYPE_REFERENCE);
+        node.node_type.insert(NodeType::REFERENCE);
         Some(node.value.as_ref().unwrap())
     }
 
@@ -174,7 +173,7 @@ where
                 let node = Node {
                     key: key,
                     value: Some(value),
-                    node_type: NODETYPE_COLD,
+                    node_type: NodeType::COLD,
                     phantom_k: PhantomData,
                 };
                 self.meta_add(node);
@@ -188,7 +187,7 @@ where
             let mentry = &mut self.slab[token];
             if mentry.value.is_some() {
                 mentry.value = Some(value);
-                mentry.node_type.insert(NODETYPE_REFERENCE);
+                mentry.node_type.insert(NodeType::REFERENCE);
                 return false;
             }
         }
@@ -200,7 +199,7 @@ where
         let node = Node {
             key: key,
             value: Some(value),
-            node_type: NODETYPE_HOT,
+            node_type: NodeType::HOT,
             phantom_k: PhantomData,
         };
         self.meta_add(node);
@@ -233,14 +232,14 @@ where
         let mut run_hand_test = false;
         {
             let mentry = &mut self.slab[self.hand_cold];
-            if mentry.node_type.intersects(NODETYPE_COLD) {
-                if mentry.node_type.intersects(NODETYPE_REFERENCE) {
-                    mentry.node_type = NODETYPE_HOT;
+            if mentry.node_type.intersects(NodeType::COLD) {
+                if mentry.node_type.intersects(NodeType::REFERENCE) {
+                    mentry.node_type = NodeType::HOT;
                     self.count_cold -= 1;
                     self.count_hot += 1;
                 } else {
-                    mentry.node_type.remove(NODETYPE_MASK);
-                    mentry.node_type.insert(NODETYPE_TEST);
+                    mentry.node_type.remove(NodeType::MASK);
+                    mentry.node_type.insert(NodeType::TEST);
                     mentry.value = None;
                     self.count_cold -= 1;
                     self.count_test += 1;
@@ -265,12 +264,12 @@ where
         }
         {
             let mentry = &mut self.slab[self.hand_hot];
-            if mentry.node_type.intersects(NODETYPE_HOT) {
-                if mentry.node_type.intersects(NODETYPE_REFERENCE) {
-                    mentry.node_type.remove(NODETYPE_REFERENCE);
+            if mentry.node_type.intersects(NodeType::HOT) {
+                if mentry.node_type.intersects(NodeType::REFERENCE) {
+                    mentry.node_type.remove(NodeType::REFERENCE);
                 } else {
-                    mentry.node_type.remove(NODETYPE_MASK);
-                    mentry.node_type.insert(NODETYPE_COLD);
+                    mentry.node_type.remove(NodeType::MASK);
+                    mentry.node_type.insert(NodeType::COLD);
                     self.count_hot -= 1;
                     self.count_cold += 1;
                 }
@@ -285,7 +284,7 @@ where
         }
         if self.slab[self.hand_test]
             .node_type
-            .intersects(NODETYPE_TEST)
+            .intersects(NodeType::TEST)
         {
             let prev = self.ring.prev_for_token(self.hand_test);
             let hand_test = self.hand_test;
@@ -302,8 +301,8 @@ where
     fn meta_del(&mut self, token: Token) {
         {
             let mentry = &mut self.slab[token];
-            mentry.node_type.remove(NODETYPE_MASK);
-            mentry.node_type.insert(NODETYPE_EMPTY);
+            mentry.node_type.remove(NodeType::MASK);
+            mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
             self.map.remove(Qey::from_ref(&mentry.key));
         }
