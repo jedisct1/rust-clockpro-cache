@@ -1,12 +1,11 @@
 #[macro_use]
 extern crate bitflags;
 
+use crate::token_ring::{Token, TokenRing};
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::marker::PhantomData;
-use std::mem;
-use crate::token_ring::{Token, TokenRing};
 
 bitflags! {
     struct NodeType: u8 {
@@ -30,7 +29,7 @@ pub struct ClockProCache<K, V> {
     capacity: usize,
     test_capacity: usize,
     cold_capacity: usize,
-    map: HashMap<KeyRef<K>, Token>,
+    map: HashMap<K, Token>,
     ring: TokenRing,
     slab: Vec<Node<K, V>>,
     hand_hot: Token,
@@ -46,7 +45,7 @@ pub struct ClockProCache<K, V> {
 
 impl<K, V> ClockProCache<K, V>
 where
-    K: Eq + Hash,
+    K: Eq + Hash + Clone,
 {
     pub fn new(capacity: usize) -> Result<Self, &'static str> {
         Self::new_with_test_capacity(capacity, capacity)
@@ -123,7 +122,7 @@ where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let token = match self.map.get(Qey::from_ref(key)) {
+        let token = match self.map.get(key) {
             None => return None,
             Some(&token) => token,
         };
@@ -140,7 +139,7 @@ where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(Qey::from_ref(key)) {
+        let token = match self.map.get(key) {
             None => return None,
             Some(&token) => token,
         };
@@ -157,7 +156,7 @@ where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(Qey::from_ref(key)) {
+        let token = match self.map.get(key) {
             None => return false,
             Some(&token) => token,
         };
@@ -165,7 +164,7 @@ where
     }
 
     pub fn insert(&mut self, key: K, value: V) -> bool {
-        let token = match self.map.get(&KeyRef { k: &key }).cloned() {
+        let token = match self.map.get(&key).cloned() {
             None => {
                 let node = Node {
                     key: key,
@@ -208,12 +207,7 @@ where
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
         self.slab[token] = node;
-        self.map.insert(
-            KeyRef {
-                k: &self.slab[token].key,
-            },
-            token,
-        );
+        self.map.insert(self.slab[token].key.clone(), token);
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -301,7 +295,7 @@ where
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
-            self.map.remove(Qey::from_ref(&mentry.key));
+            self.map.remove(&mentry.key);
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
@@ -329,46 +323,6 @@ where
     K: Sync,
     V: Sync,
 {
-}
-
-struct KeyRef<K> {
-    k: *const K,
-}
-
-impl<K: Hash> Hash for KeyRef<K> {
-    #[inline]
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        unsafe { (*self.k).hash(state) }
-    }
-}
-
-impl<K: PartialEq> PartialEq for KeyRef<K> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        unsafe { (*self.k).eq(&*other.k) }
-    }
-}
-
-impl<K: Eq> Eq for KeyRef<K> {}
-
-#[derive(Hash, PartialEq, Eq)]
-struct Qey<Q: ?Sized>(Q);
-
-impl<Q: ?Sized> Qey<Q> {
-    #[inline]
-    fn from_ref(q: &Q) -> &Self {
-        unsafe { mem::transmute(q) }
-    }
-}
-
-impl<K, Q: ?Sized> Borrow<Qey<Q>> for KeyRef<K>
-where
-    K: Borrow<Q>,
-{
-    #[inline]
-    fn borrow(&self) -> &Qey<Q> {
-        Qey::from_ref(unsafe { (*self.k).borrow() })
-    }
 }
 
 mod token_ring {
