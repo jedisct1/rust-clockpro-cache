@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::mem;
-use token_ring::{Token, TokenRing};
+use crate::token_ring::{Token, TokenRing};
 
 bitflags! {
     struct NodeType: u8 {
