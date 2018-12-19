@@ -1,3 +1,6 @@
+#![feature(test)]
+extern crate test;
+
 #[macro_use]
 extern crate bitflags;
 
@@ -456,34 +459,117 @@ mod token_ring {
     }
 }
 
-#[test]
-fn test_cache() {
-    let mut cache = ClockProCache::new(3).unwrap();
-    cache.insert("testkey", "testvalue");
-    assert!(cache.contains_key("testkey"));
-    cache.insert("testkey2", "testvalue2");
-    assert!(cache.contains_key("testkey2"));
-    cache.insert("testkey3", "testvalue3");
-    assert!(cache.contains_key("testkey3"));
-    cache.insert("testkey4", "testvalue4");
-    assert!(cache.contains_key("testkey4"));
-    assert!(cache.contains_key("testkey3"));
-    assert!(!cache.contains_key("testkey2"));
-    cache.insert("testkey", "testvalue");
-    assert!(cache.get_mut("testkey").is_some());
-    assert!(cache.get_mut("testkey-nx").is_none());
-}
+#[cfg(test)]
+mod tests {
+    use rand::thread_rng;
+    use rand::distributions::{Distribution, Normal, Uniform};
+    use test::{black_box, Bencher};
+    use super::ClockProCache;
 
-#[test]
-fn test_recycle() {
-    let mut cache: ClockProCache<u64, u64> = ClockProCache::new(3).unwrap();
-    for i in 0..7 {
-        assert_eq!(cache.insert(i, i), true);
+    #[test]
+    fn test_cache() {
+        let mut cache = ClockProCache::new(3).unwrap();
+        cache.insert("testkey", "testvalue");
+        assert!(cache.contains_key("testkey"));
+        cache.insert("testkey2", "testvalue2");
+        assert!(cache.contains_key("testkey2"));
+        cache.insert("testkey3", "testvalue3");
+        assert!(cache.contains_key("testkey3"));
+        cache.insert("testkey4", "testvalue4");
+        assert!(cache.contains_key("testkey4"));
+        assert!(cache.contains_key("testkey3"));
+        assert!(!cache.contains_key("testkey2"));
+        cache.insert("testkey", "testvalue");
+        assert!(cache.get_mut("testkey").is_some());
+        assert!(cache.get_mut("testkey-nx").is_none());
     }
-    for i in 0..2 {
-        match cache.get(&i) {
-            None => {}
-            Some(x) => assert_eq!(*x, i),
+
+    #[test]
+    fn test_recycle() {
+        let mut cache: ClockProCache<u64, u64> = ClockProCache::new(3).unwrap();
+        for i in 0..7 {
+            assert_eq!(cache.insert(i, i), true);
         }
+        for i in 0..2 {
+            match cache.get(&i) {
+                None => {}
+                Some(x) => assert_eq!(*x, i),
+            }
+        }
+    }
+
+    #[test]
+    fn test_composite() {
+        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(3).unwrap();
+        for i in 0..7 {
+            assert_eq!(cache.insert(i, (vec![0u8; 12], i)), true);
+        }
+        for i in 0..2 {
+            match cache.get(&i) {
+                None => {}
+                Some(x) => assert_eq!(x.1, i),
+            }
+        }
+    }
+
+    #[bench]
+    fn bench_sequence(b: &mut Bencher) {
+        let mut cache: ClockProCache<u64, u64> = ClockProCache::new(68).unwrap();
+        b.iter(|| {
+            for i in 1..1000 {
+                let n = i % 100;
+                black_box(cache.insert(n, n));
+            }
+        });
+        b.iter(|| {
+            for i in 1..1000 {
+                let n = i % 100;
+                black_box(cache.get(&n));
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_composite(b: &mut Bencher) {
+        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(68).unwrap();
+        let mut rng = thread_rng();
+        let uniform = Uniform::new(0, 100);
+        let mut rand_iter = uniform.sample_iter(&mut rng);
+        b.iter(|| {
+            for _ in 1..1000 {
+                let n = rand_iter.next().unwrap();
+                black_box(cache.insert(n, (vec![0u8; 12], n)));
+            }
+        });
+        b.iter(|| {
+            for _ in 1..1000 {
+                let n = rand_iter.next().unwrap();
+                black_box(cache.get(&n));
+            }
+        });
+    }
+
+    #[bench]
+    fn bench_composite_normal(b: &mut Bencher) {
+        // The cache size is ~ 1x sigma (stddev) to retain roughly >68% of records
+        const SIGMA : f64 = 50.0 / 3.0;
+        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(SIGMA as usize).unwrap();
+
+        // This should roughly cover all elements (within 3-sigma)
+        let mut rng = thread_rng();
+        let normal = Normal::new(50.0, SIGMA);
+        let mut rand_iter = normal.sample_iter(&mut rng).map(|x| (x as u64) % 100);
+        b.iter(|| {
+            for _ in 1..1000 {
+                let n = rand_iter.next().unwrap();
+                black_box(cache.insert(n, (vec![0u8; 12], n)));
+            }
+        });
+        b.iter(|| {
+            for _ in 1..1000 {
+                let n = rand_iter.next().unwrap();
+                black_box(cache.get(&n));
+            }
+        });
     }
 }

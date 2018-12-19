@@ -7,6 +7,7 @@ keywords = ["cache"]
 license = "MIT"
 authors = ["Frank Denis <github@pureftpd.org>"]
 categories = ["algorithms", "caching"]
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "jedisct1/rust-clockpro-cache" }
@@ -15,3 +16,9 @@ appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 [dependencies]
 slab = "~0.4"
 bitflags = "~1"
+
+[dev-dependencies]
+rand = "0.6"
+
+[profile.release]
+debug = true
