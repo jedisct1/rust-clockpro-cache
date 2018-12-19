@@ -31,7 +31,7 @@ pub struct ClockProCache<K, V> {
     cold_capacity: usize,
     map: HashMap<K, Token>,
     ring: TokenRing,
-    slab: Vec<Node<K, V>>,
+    slab: Vec<Option<Node<K, V>>>,
     hand_hot: Token,
     hand_cold: Token,
     hand_test: Token,
@@ -59,16 +59,16 @@ where
             return Err("Cache size cannot be less than 3 entries");
         }
         let mut slab = Vec::with_capacity(capacity + test_capacity);
-        unsafe {
-            slab.set_len(capacity + test_capacity);
+        for _ in 0..capacity + test_capacity {
+            slab.push(None);
         }
         let cache = ClockProCache {
-            capacity: capacity,
-            test_capacity: test_capacity,
+            capacity,
+            test_capacity,
             cold_capacity: capacity,
             map: HashMap::with_capacity(capacity + test_capacity),
             ring: TokenRing::with_capacity(capacity + test_capacity),
-            slab: slab,
+            slab,
             hand_hot: 0,
             hand_cold: 0,
             hand_test: 0,
@@ -126,7 +126,7 @@ where
             None => return None,
             Some(&token) => token,
         };
-        let node = &mut self.slab[token];
+        let node = self.slab[token].as_mut().expect("uninitialized node");
         if node.value.is_none() {
             return None;
         }
@@ -143,7 +143,7 @@ where
             None => return None,
             Some(&token) => token,
         };
-        let node = &mut self.slab[token];
+        let node = self.slab[token].as_mut().expect("uninitialized node");
         if node.value.is_none() {
             return None;
         }
@@ -160,14 +160,18 @@ where
             None => return false,
             Some(&token) => token,
         };
-        self.slab[token].value.is_some()
+        self.slab[token]
+            .as_ref()
+            .expect("uninitialized node")
+            .value
+            .is_some()
     }
 
     pub fn insert(&mut self, key: K, value: V) -> bool {
         let token = match self.map.get(&key).cloned() {
             None => {
                 let node = Node {
-                    key: key,
+                    key,
                     value: Some(value),
                     node_type: NodeType::COLD,
                     phantom_k: PhantomData,
@@ -180,7 +184,7 @@ where
             Some(token) => token,
         };
         {
-            let mentry = &mut self.slab[token];
+            let mentry = self.slab[token].as_mut().expect("uninitialized node");
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NodeType::REFERENCE);
@@ -193,7 +197,7 @@ where
         self.count_test -= 1;
         self.meta_del(token);
         let node = Node {
-            key: key,
+            key,
             value: Some(value),
             node_type: NodeType::HOT,
             phantom_k: PhantomData,
@@ -206,8 +210,15 @@ where
     fn meta_add(&mut self, node: Node<K, V>) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
-        self.slab[token] = node;
-        self.map.insert(self.slab[token].key.clone(), token);
+        self.slab[token] = Some(node);
+        self.map.insert(
+            self.slab[token]
+                .as_ref()
+                .expect("uninitialized node")
+                .key
+                .clone(),
+            token,
+        );
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -222,7 +233,9 @@ where
     fn run_hand_cold(&mut self) {
         let mut run_hand_test = false;
         {
-            let mentry = &mut self.slab[self.hand_cold];
+            let mentry = self.slab[self.hand_cold]
+                .as_mut()
+                .expect("uninitialized node");
             if mentry.node_type.intersects(NodeType::COLD) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type = NodeType::HOT;
@@ -254,7 +267,9 @@ where
             self.run_hand_test();
         }
         {
-            let mentry = &mut self.slab[self.hand_hot];
+            let mentry = self.slab[self.hand_hot]
+                .as_mut()
+                .expect("uninitialized node");
             if mentry.node_type.intersects(NodeType::HOT) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type.remove(NodeType::REFERENCE);
@@ -274,6 +289,8 @@ where
             self.run_hand_cold();
         }
         if self.slab[self.hand_test]
+            .as_ref()
+            .expect("uninitialized node")
             .node_type
             .intersects(NodeType::TEST)
         {
@@ -291,7 +308,7 @@ where
 
     fn meta_del(&mut self, token: Token) {
         {
-            let mentry = &mut self.slab[token];
+            let mentry = self.slab[token].as_mut().expect("uninitialized node");
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
@@ -353,7 +370,7 @@ mod token_ring {
             TokenRing {
                 head: TOKEN_THUMBSTONE,
                 tail: TOKEN_THUMBSTONE,
-                slab: slab,
+                slab,
             }
         }
 
