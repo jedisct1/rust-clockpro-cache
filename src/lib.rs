@@ -132,9 +132,7 @@ where
             Some(&token) => token,
         };
         let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        if node.value.is_none() {
-            return None;
-        }
+        node.value.as_ref()?;
         node.node_type.insert(NodeType::REFERENCE);
         Some(node.value.as_mut().unwrap())
     }
@@ -149,9 +147,7 @@ where
             Some(&token) => token,
         };
         let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        if node.value.is_none() {
-            return None;
-        }
+        node.value.as_ref()?;
         node.node_type.insert(NodeType::REFERENCE);
         Some(node.value.as_ref().unwrap())
     }
