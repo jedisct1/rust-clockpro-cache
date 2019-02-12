@@ -4,6 +4,8 @@ extern crate test;
 #[macro_use]
 extern crate bitflags;
 
+use unsafe_unwrap::UnsafeUnwrap;
+
 use crate::token_ring::{Token, TokenRing};
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -129,7 +131,7 @@ where
             None => return None,
             Some(&token) => token,
         };
-        let node = self.slab[token].as_mut().expect("uninitialized node");
+        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
         if node.value.is_none() {
             return None;
         }
@@ -146,7 +148,7 @@ where
             None => return None,
             Some(&token) => token,
         };
-        let node = self.slab[token].as_mut().expect("uninitialized node");
+        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
         if node.value.is_none() {
             return None;
         }
@@ -163,11 +165,7 @@ where
             None => return false,
             Some(&token) => token,
         };
-        self.slab[token]
-            .as_ref()
-            .expect("uninitialized node")
-            .value
-            .is_some()
+        unsafe { self.slab[token].as_ref().unsafe_unwrap().value.is_some() }
     }
 
     pub fn insert(&mut self, key: K, value: V) -> bool {
@@ -187,7 +185,7 @@ where
             Some(token) => token,
         };
         {
-            let mentry = self.slab[token].as_mut().expect("uninitialized node");
+            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NodeType::REFERENCE);
@@ -215,11 +213,7 @@ where
         let token = self.ring.insert_after(self.hand_hot);
         self.slab[token] = Some(node);
         self.map.insert(
-            self.slab[token]
-                .as_ref()
-                .expect("uninitialized node")
-                .key
-                .clone(),
+            unsafe { self.slab[token].as_ref().unsafe_unwrap().key.clone() },
             token,
         );
         if self.hand_cold == self.hand_hot {
@@ -236,9 +230,7 @@ where
     fn run_hand_cold(&mut self) {
         let mut run_hand_test = false;
         {
-            let mentry = self.slab[self.hand_cold]
-                .as_mut()
-                .expect("uninitialized node");
+            let mentry = unsafe { self.slab[self.hand_cold].as_mut().unsafe_unwrap() };
             if mentry.node_type.intersects(NodeType::COLD) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type = NodeType::HOT;
@@ -270,9 +262,7 @@ where
             self.run_hand_test();
         }
         {
-            let mentry = self.slab[self.hand_hot]
-                .as_mut()
-                .expect("uninitialized node");
+            let mentry = unsafe { self.slab[self.hand_hot].as_mut().unsafe_unwrap() };
             if mentry.node_type.intersects(NodeType::HOT) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type.remove(NodeType::REFERENCE);
@@ -291,12 +281,13 @@ where
         if self.hand_test == self.hand_cold {
             self.run_hand_cold();
         }
-        if self.slab[self.hand_test]
-            .as_ref()
-            .expect("uninitialized node")
-            .node_type
-            .intersects(NodeType::TEST)
-        {
+        if unsafe {
+            self.slab[self.hand_test]
+                .as_ref()
+                .unsafe_unwrap()
+                .node_type
+                .intersects(NodeType::TEST)
+        } {
             let prev = self.ring.prev_for_token(self.hand_test);
             let hand_test = self.hand_test;
             self.meta_del(hand_test);
@@ -311,7 +302,7 @@ where
 
     fn meta_del(&mut self, token: Token) {
         {
-            let mentry = self.slab[token].as_mut().expect("uninitialized node");
+            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
@@ -461,10 +452,10 @@ mod token_ring {
 
 #[cfg(test)]
 mod tests {
-    use rand::thread_rng;
-    use rand::distributions::{Distribution, Normal, Uniform};
-    use test::{black_box, Bencher};
     use super::ClockProCache;
+    use rand::distributions::{Distribution, Normal, Uniform};
+    use rand::thread_rng;
+    use test::{black_box, Bencher};
 
     #[test]
     fn test_cache() {
@@ -552,8 +543,9 @@ mod tests {
     #[bench]
     fn bench_composite_normal(b: &mut Bencher) {
         // The cache size is ~ 1x sigma (stddev) to retain roughly >68% of records
-        const SIGMA : f64 = 50.0 / 3.0;
-        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(SIGMA as usize).unwrap();
+        const SIGMA: f64 = 50.0 / 3.0;
+        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> =
+            ClockProCache::new(SIGMA as usize).unwrap();
 
         // This should roughly cover all elements (within 3-sigma)
         let mut rng = thread_rng();
