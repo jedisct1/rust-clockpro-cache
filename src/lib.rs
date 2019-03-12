@@ -333,9 +333,8 @@ where
 }
 
 mod token_ring {
-    extern crate slab;
-
     use self::slab::Slab;
+    use slab;
 
     pub type Token = usize;
     const TOKEN_THUMBSTONE: Token = !0;
