@@ -9,6 +9,9 @@ authors = ["Frank Denis <github@pureftpd.org>"]
 categories = ["algorithms", "caching"]
 edition = "2018"
 
+[features]
+nightly = ["hashbrown/nightly"]
+
 [badges]
 travis-ci = { repository = "jedisct1/rust-clockpro-cache" }
 appveyor = { repository = "jedisct1/rust-clockpro-cache" }
@@ -17,6 +20,7 @@ appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 slab = "0.4"
 bitflags = "1.0"
 unsafe_unwrap = "0.1"
+hashbrown = "0.1"
 
 [dev-dependencies]
 rand = "0.6"

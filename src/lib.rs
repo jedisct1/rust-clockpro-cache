@@ -7,8 +7,8 @@ extern crate bitflags;
 use unsafe_unwrap::UnsafeUnwrap;
 
 use crate::token_ring::{Token, TokenRing};
+use hashbrown::HashMap;
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
