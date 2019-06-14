@@ -1,6 +1,3 @@
-#![feature(test)]
-extern crate test;
-
 #[macro_use]
 extern crate bitflags;
 
@@ -448,9 +445,6 @@ mod token_ring {
 #[cfg(test)]
 mod tests {
     use super::ClockProCache;
-    use rand::distributions::{Distribution, Normal, Uniform};
-    use rand::thread_rng;
-    use test::{black_box, Bencher};
 
     #[test]
     fn test_cache() {
@@ -496,67 +490,5 @@ mod tests {
                 Some(x) => assert_eq!(x.1, i),
             }
         }
-    }
-
-    #[bench]
-    fn bench_sequence(b: &mut Bencher) {
-        let mut cache: ClockProCache<u64, u64> = ClockProCache::new(68).unwrap();
-        b.iter(|| {
-            for i in 1..1000 {
-                let n = i % 100;
-                black_box(cache.insert(n, n));
-            }
-        });
-        b.iter(|| {
-            for i in 1..1000 {
-                let n = i % 100;
-                black_box(cache.get(&n));
-            }
-        });
-    }
-
-    #[bench]
-    fn bench_composite(b: &mut Bencher) {
-        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(68).unwrap();
-        let mut rng = thread_rng();
-        let uniform = Uniform::new(0, 100);
-        let mut rand_iter = uniform.sample_iter(&mut rng);
-        b.iter(|| {
-            for _ in 1..1000 {
-                let n = rand_iter.next().unwrap();
-                black_box(cache.insert(n, (vec![0u8; 12], n)));
-            }
-        });
-        b.iter(|| {
-            for _ in 1..1000 {
-                let n = rand_iter.next().unwrap();
-                black_box(cache.get(&n));
-            }
-        });
-    }
-
-    #[bench]
-    fn bench_composite_normal(b: &mut Bencher) {
-        // The cache size is ~ 1x sigma (stddev) to retain roughly >68% of records
-        const SIGMA: f64 = 50.0 / 3.0;
-        let mut cache: ClockProCache<u64, (Vec<u8>, u64)> =
-            ClockProCache::new(SIGMA as usize).unwrap();
-
-        // This should roughly cover all elements (within 3-sigma)
-        let mut rng = thread_rng();
-        let normal = Normal::new(50.0, SIGMA);
-        let mut rand_iter = normal.sample_iter(&mut rng).map(|x| (x as u64) % 100);
-        b.iter(|| {
-            for _ in 1..1000 {
-                let n = rand_iter.next().unwrap();
-                black_box(cache.insert(n, (vec![0u8; 12], n)));
-            }
-        });
-        b.iter(|| {
-            for _ in 1..1000 {
-                let n = rand_iter.next().unwrap();
-                black_box(cache.get(&n));
-            }
-        });
     }
 }
