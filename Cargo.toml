@@ -15,13 +15,19 @@ appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
 slab = "0.4"
-bitflags = "1.0"
+bitflags = "1.1"
 unsafe_unwrap = "0.1"
 
 [dev-dependencies]
-criterion = "0.2"
-rand = "0.6"
+criterion = "0.3"
+rand = "0.7"
+rand_distr = "0.2.2"
 
 [[bench]]
 name = "criterion"
 harness = false
+
+[profile.release]
+lto = true
+panic = "abort"
+opt-level = 3

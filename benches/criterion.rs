@@ -3,8 +3,8 @@ extern crate criterion;
 
 use clockpro_cache::ClockProCache;
 use criterion::{black_box, Criterion};
-use rand::distributions::{Distribution, Normal, Uniform};
 use rand::thread_rng;
+use rand_distr::{Distribution, Normal, Uniform};
 
 fn bench_sequence(c: &mut Criterion) {
     c.bench_function("bench_sequence", |b| {
@@ -55,7 +55,7 @@ fn bench_composite_normal(c: &mut Criterion) {
 
         // This should roughly cover all elements (within 3-sigma)
         let mut rng = thread_rng();
-        let normal = Normal::new(50.0, SIGMA);
+        let normal = Normal::new(50.0, SIGMA).unwrap();
         let mut rand_iter = normal.sample_iter(&mut rng).map(|x| (x as u64) % 100);
         b.iter(|| {
             for _ in 1..1000 {
