@@ -330,8 +330,7 @@ where
 }
 
 mod token_ring {
-    use self::slab::Slab;
-    use slab;
+    use slab::Slab;
 
     pub type Token = usize;
     const TOKEN_THUMBSTONE: Token = !0;
