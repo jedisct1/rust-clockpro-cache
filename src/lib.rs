@@ -201,6 +201,30 @@ where
         true
     }
 
+    pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Eq + Hash,
+    {
+        let token = match self.map.get(key) {
+            None => return None,
+            Some(&token) => token,
+        };
+
+        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+        let value = node.value.take();
+
+        // The key is in map, so the node must be HOT or COLD
+        if node.node_type.intersects(NodeType::HOT) {
+            self.count_hot -= 1;
+        } else if node.node_type.intersects(NodeType::COLD) {
+            self.count_cold -= 1;
+        }
+
+        self.meta_del(token);
+        value
+    }
+
     fn meta_add(&mut self, node: Node<K, V>) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
@@ -488,6 +512,37 @@ mod tests {
                 None => {}
                 Some(x) => assert_eq!(x.1, i),
             }
+        }
+    }
+
+    #[test]
+    fn test_remove() {
+        let mut cache: ClockProCache<u64, u64> = ClockProCache::new(4).unwrap();
+        for i in 0..4 {
+            assert_eq!(cache.insert(i, i), true);
+        }
+
+        assert_eq!(cache.remove(&2), Some(2));
+        assert_eq!(cache.remove(&3), Some(3));
+        assert_eq!(cache.remove(&3), None);
+
+        for i in 0..4 {
+            match i {
+                2|3 => assert_eq!(cache.get(&i), None),
+                _ => assert_eq!(*cache.get(&i).unwrap(), i),
+            };
+        }
+
+        // Reinsert removed entries
+        for i in 2..4 {
+            assert_eq!(cache.insert(i, i), true);
+        }
+
+        // Check that all entries still exist
+        for i in 0..4 {
+            match i {
+                _ => assert_eq!(*cache.get(&i).unwrap(), i),
+            };
         }
     }
 }
