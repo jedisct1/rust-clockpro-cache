@@ -540,9 +540,7 @@ mod tests {
 
         // Check that all entries still exist
         for i in 0..4 {
-            match i {
-                _ => assert_eq!(*cache.get(&i).unwrap(), i),
-            };
+            assert_eq!(*cache.get(&i).unwrap(), i);
         }
     }
 }
