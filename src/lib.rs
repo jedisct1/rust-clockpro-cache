@@ -528,7 +528,7 @@ mod tests {
 
         for i in 0..4 {
             match i {
-                2|3 => assert_eq!(cache.get(&i), None),
+                2 | 3 => assert_eq!(cache.get(&i), None),
                 _ => assert_eq!(*cache.get(&i).unwrap(), i),
             };
         }
