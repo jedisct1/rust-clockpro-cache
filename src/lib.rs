@@ -491,7 +491,7 @@ mod tests {
     fn test_recycle() {
         let mut cache: ClockProCache<u64, u64> = ClockProCache::new(3).unwrap();
         for i in 0..7 {
-            assert_eq!(cache.insert(i, i), true);
+            assert!(cache.insert(i, i));
         }
         for i in 0..2 {
             match cache.get(&i) {
@@ -505,7 +505,7 @@ mod tests {
     fn test_composite() {
         let mut cache: ClockProCache<u64, (Vec<u8>, u64)> = ClockProCache::new(3).unwrap();
         for i in 0..7 {
-            assert_eq!(cache.insert(i, (vec![0u8; 12], i)), true);
+            assert!(cache.insert(i, (vec![0u8; 12], i)));
         }
         for i in 0..2 {
             match cache.get(&i) {
@@ -519,7 +519,7 @@ mod tests {
     fn test_remove() {
         let mut cache: ClockProCache<u64, u64> = ClockProCache::new(4).unwrap();
         for i in 0..4 {
-            assert_eq!(cache.insert(i, i), true);
+            assert!(cache.insert(i, i));
         }
 
         assert_eq!(cache.remove(&2), Some(2));
@@ -535,7 +535,7 @@ mod tests {
 
         // Reinsert removed entries
         for i in 2..4 {
-            assert_eq!(cache.insert(i, i), true);
+            assert!(cache.insert(i, i));
         }
 
         // Check that all entries still exist
