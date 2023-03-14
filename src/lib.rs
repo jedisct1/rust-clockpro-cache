@@ -15,7 +15,7 @@ bitflags! {
         const HOT       = 0b00010;
         const COLD      = 0b00100;
         const TEST      = 0b01000;
-        const MASK      = Self::EMPTY.bits | Self::HOT.bits | Self::COLD.bits | Self::TEST.bits;
+        const MASK      = Self::EMPTY.bits() | Self::HOT.bits() | Self::COLD.bits() | Self::TEST.bits();
         const REFERENCE = 0b10000;
     }
 }
