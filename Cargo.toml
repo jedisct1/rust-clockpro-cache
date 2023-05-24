@@ -19,7 +19,7 @@ bitflags = "2.0"
 unsafe_unwrap = "0.1"
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 
