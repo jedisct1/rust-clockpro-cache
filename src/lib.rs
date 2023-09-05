@@ -1,13 +1,10 @@
 #[macro_use]
 extern crate bitflags;
 
-use unsafe_unwrap::UnsafeUnwrap;
-
 use crate::token_ring::{Token, TokenRing};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
 bitflags! {
     struct NodeType: u8 {
@@ -21,10 +18,19 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: K,
+    key: Option<K>,
     value: Option<V>,
     node_type: NodeType,
-    phantom_k: PhantomData<K>,
+}
+
+impl<K, V> Default for Node<K, V> {
+    fn default() -> Self {
+        Node {
+            key: None,
+            value: None,
+            node_type: NodeType::EMPTY,
+        }
+    }
 }
 
 pub struct ClockProCache<K, V> {
@@ -33,7 +39,7 @@ pub struct ClockProCache<K, V> {
     cold_capacity: usize,
     map: HashMap<K, Token>,
     ring: TokenRing,
-    slab: Vec<Option<Node<K, V>>>,
+    slab: Vec<Node<K, V>>,
     hand_hot: Token,
     hand_cold: Token,
     hand_test: Token,
@@ -42,7 +48,6 @@ pub struct ClockProCache<K, V> {
     count_test: usize,
     inserted: u64,
     evicted: u64,
-    phantom_k: PhantomData<K>,
 }
 
 impl<K, V> ClockProCache<K, V>
@@ -61,9 +66,7 @@ where
             return Err("Cache size cannot be less than 3 entries");
         }
         let mut slab = Vec::with_capacity(capacity + test_capacity);
-        for _ in 0..capacity + test_capacity {
-            slab.push(None);
-        }
+        slab.resize_with(capacity + test_capacity, Node::default);
         let cache = ClockProCache {
             capacity,
             test_capacity,
@@ -79,7 +82,6 @@ where
             count_test: 0,
             inserted: 0,
             evicted: 0,
-            phantom_k: PhantomData,
         };
         Ok(cache)
     }
@@ -124,14 +126,11 @@ where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        node.value.as_ref()?;
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
+        let value = node.value.as_mut()?;
         node.node_type.insert(NodeType::REFERENCE);
-        Some(node.value.as_mut().unwrap())
+        Some(value)
     }
 
     pub fn get<Q: ?Sized>(&mut self, key: &Q) -> Option<&V>
@@ -139,14 +138,11 @@ where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        node.value.as_ref()?;
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
+        let value = &node.value.as_ref()?;
         node.node_type.insert(NodeType::REFERENCE);
-        Some(node.value.as_ref().unwrap())
+        Some(value)
     }
 
     pub fn contains_key<Q: ?Sized>(&mut self, key: &Q) -> bool
@@ -154,23 +150,17 @@ where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(key) {
-            None => return false,
-            Some(&token) => token,
-        };
-        unsafe { self.slab[token].as_ref().unsafe_unwrap().value.is_some() }
+        if let Some(&token) = self.map.get(key) {
+            self.slab[token].value.is_some()
+        } else {
+            false
+        }
     }
 
     pub fn insert(&mut self, key: K, value: V) -> bool {
         let token = match self.map.get(&key).cloned() {
             None => {
-                let node = Node {
-                    key,
-                    value: Some(value),
-                    node_type: NodeType::COLD,
-                    phantom_k: PhantomData,
-                };
-                self.meta_add(node);
+                self.meta_add(key, value, NodeType::COLD);
                 self.count_cold += 1;
                 self.inserted += 1;
                 return true;
@@ -178,7 +168,7 @@ where
             Some(token) => token,
         };
         {
-            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[token];
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NodeType::REFERENCE);
@@ -190,13 +180,7 @@ where
         }
         self.count_test -= 1;
         self.meta_del(token);
-        let node = Node {
-            key,
-            value: Some(value),
-            node_type: NodeType::HOT,
-            phantom_k: PhantomData,
-        };
-        self.meta_add(node);
+        self.meta_add(key, value, NodeType::HOT);
         self.count_hot += 1;
         true
     }
@@ -206,12 +190,8 @@ where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
         let value = node.value.take();
 
         // The key is in map, so the node must be HOT or COLD
@@ -225,14 +205,15 @@ where
         value
     }
 
-    fn meta_add(&mut self, node: Node<K, V>) {
+    fn meta_add(&mut self, key: K, value: V, node_type: NodeType) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
-        self.slab[token] = Some(node);
-        self.map.insert(
-            unsafe { self.slab[token].as_ref().unsafe_unwrap().key.clone() },
-            token,
-        );
+        self.slab[token] = Node {
+            key: Some(key.clone()),
+            value: Some(value),
+            node_type,
+        };
+        self.map.insert(key, token);
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -247,7 +228,7 @@ where
     fn run_hand_cold(&mut self) {
         let mut run_hand_test = false;
         {
-            let mentry = unsafe { self.slab[self.hand_cold].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[self.hand_cold];
             if mentry.node_type.intersects(NodeType::COLD) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type = NodeType::HOT;
@@ -279,7 +260,7 @@ where
             self.run_hand_test();
         }
         {
-            let mentry = unsafe { self.slab[self.hand_hot].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[self.hand_hot];
             if mentry.node_type.intersects(NodeType::HOT) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type.remove(NodeType::REFERENCE);
@@ -298,13 +279,10 @@ where
         if self.hand_test == self.hand_cold {
             self.run_hand_cold();
         }
-        if unsafe {
-            self.slab[self.hand_test]
-                .as_ref()
-                .unsafe_unwrap()
-                .node_type
-                .intersects(NodeType::TEST)
-        } {
+        if self.slab[self.hand_test]
+            .node_type
+            .intersects(NodeType::TEST)
+        {
             let prev = self.ring.prev_for_token(self.hand_test);
             let hand_test = self.hand_test;
             self.meta_del(hand_test);
@@ -319,11 +297,13 @@ where
 
     fn meta_del(&mut self, token: Token) {
         {
-            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[token];
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
-            self.map.remove(&mentry.key);
+            if let Some(key) = &mentry.key {
+                self.map.remove(key);
+            }
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
