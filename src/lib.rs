@@ -523,4 +523,81 @@ mod tests {
             assert_eq!(*cache.get(&i).unwrap(), i);
         }
     }
+
+    #[test]
+    fn test_length_and_counters() {
+        let mut cache: ClockProCache<usize, usize> = ClockProCache::new(5).unwrap();
+
+        // Cache starts out empty.
+        assert_eq!(cache.is_empty(), true);
+
+        for i in 1..=5 {
+            // Cache length should increase with each new item.
+            assert!(cache.insert(i, i));
+            assert_eq!(cache.len(), i);
+        }
+
+        // Cache is no longer empty.
+        assert_eq!(cache.is_empty(), false);
+        assert_eq!(cache.inserted(), 5);
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 5);
+
+        // Cache length should be capped at capacity.
+        assert!(cache.insert(6, 6));
+        assert!(cache.insert(7, 7));
+
+        assert_eq!(cache.len(), 5);
+        assert_eq!(cache.inserted(), 7);
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 5);
+
+        // Reference the two recent values and insert new ones to run the hand
+        // and make the REFERENCED nodes HOT.
+        assert_eq!(cache.get(&6), Some(&6));
+        assert_eq!(cache.get(&7), Some(&7));
+
+        for i in 8..=15 {
+            assert!(cache.insert(i, i));
+        }
+
+        // Both 6 and 7 should be HOT and not have been evicted.
+        assert_eq!(cache.get(&6), Some(&6));
+        assert_eq!(cache.get(&7), Some(&7));
+
+        assert_eq!(cache.len(), 5);
+        assert_eq!(cache.inserted(), 15);
+        assert_eq!(cache.frequent_len(), 2);
+        assert_eq!(cache.recent_len(), 3);
+        assert_eq!(cache.test_len(), 5);
+
+        // Removing 6 and 15 should decrement HOT and COLD counters.
+        assert_eq!(cache.remove(&6), Some(6));
+        assert_eq!(cache.remove(&15), Some(15));
+        assert_eq!(cache.frequent_len(), 1);
+        assert_eq!(cache.recent_len(), 2);
+    }
+
+    #[test]
+    fn test_evicted_to_hot() {
+        let mut cache: ClockProCache<usize, usize> = ClockProCache::new_with_test_capacity(3, 30).unwrap();
+
+        // Insert test capacity items.
+        for i in 0..30 {
+            assert!(cache.insert(i, i));
+        }
+
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 3);
+        assert_eq!(cache.test_len(), 27);
+
+        // 10 should be evicted but still have a TEST node.
+        assert_eq!(cache.get(&10), None);
+
+        // Inserting 0 again should replace the TEST node w/ a HOT one.
+        assert!(cache.insert(10, 10));
+        assert_eq!(cache.frequent_len(), 1);
+        assert_eq!(cache.recent_len(), 2);
+        assert_eq!(cache.test_len(), 27);
+    }
 }
