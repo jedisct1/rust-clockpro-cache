@@ -12,6 +12,7 @@ use crate::token_ring::{Token, TokenRing};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::mem::MaybeUninit;
 
 bitflags! {
     struct NodeType: u8 {
@@ -25,7 +26,7 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: Option<K>, // The key is actually never optional. This is a common practice in Rust to make the source code look nicer, at the expense of a bit of performance and memory.
+    key: MaybeUninit<K>,
     value: Option<V>,
     node_type: NodeType,
 }
@@ -33,7 +34,7 @@ struct Node<K, V> {
 impl<K, V> Default for Node<K, V> {
     fn default() -> Self {
         Node {
-            key: None,
+            key: MaybeUninit::uninit(),
             value: None,
             node_type: NodeType::EMPTY,
         }
@@ -244,7 +245,7 @@ where
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
         self.slab[token] = Node {
-            key: Some(key.clone()),
+            key: MaybeUninit::new(key.clone()),
             value: Some(value),
             node_type,
         };
@@ -336,9 +337,7 @@ where
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
-            if let Some(key) = &mentry.key {
-                self.map.remove(key);
-            }
+            self.map.remove(unsafe { mentry.key.assume_init_ref() });
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
