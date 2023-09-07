@@ -25,7 +25,7 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: Option<K>,
+    key: Option<K>, // The key is actually never optional. This is a common practice in Rust to make the source code look nicer, at the expense of a bit of performance and memory.
     value: Option<V>,
     node_type: NodeType,
 }
@@ -615,7 +615,8 @@ mod tests {
 
     #[test]
     fn test_evicted_to_hot() {
-        let mut cache: ClockProCache<usize, usize> = ClockProCache::new_with_test_capacity(3, 30).unwrap();
+        let mut cache: ClockProCache<usize, usize> =
+            ClockProCache::new_with_test_capacity(3, 30).unwrap();
 
         // Insert test capacity items.
         for i in 0..30 {
