@@ -1,3 +1,10 @@
+//! This is an implementation of the [CLOCK-Pro cache] algorithm.
+//!
+//! CLOCK-Pro keeps track of recently referenced and recently evicted cache entries, which allows
+//! it to avoid the evictions that weak access patterns such as scan and loop typically induce in
+//! LRU and CLOCK.
+//!
+//! [CLOCK-Pro cache]: https://static.usenix.org/event/usenix05/tech/general/full_papers/jiang/jiang_html/html.html
 #[macro_use]
 extern crate bitflags;
 
@@ -33,6 +40,7 @@ impl<K, V> Default for Node<K, V> {
     }
 }
 
+/// A CLOCK-Pro cache that maps keys to values.
 pub struct ClockProCache<K, V> {
     capacity: usize,
     test_capacity: usize,
@@ -54,10 +62,15 @@ impl<K, V> ClockProCache<K, V>
 where
     K: Eq + Hash + Clone,
 {
+    /// Create a new cache with the given capacity.
     pub fn new(capacity: usize) -> Result<Self, &'static str> {
         Self::new_with_test_capacity(capacity, capacity)
     }
 
+    /// Create a new cache with the given value and test capacities.
+    ///
+    /// The test capacity is used for tracking recently evicted entries, so that they will
+    /// be considered frequently used if they get reinserted.
     pub fn new_with_test_capacity(
         capacity: usize,
         test_capacity: usize,
@@ -86,41 +99,51 @@ where
         Ok(cache)
     }
 
+    /// Returns the number of cached values.
     #[inline]
     pub fn len(&self) -> usize {
         self.count_cold + self.count_hot
     }
 
+    /// Returns `true` when no values are currently cached.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Returns the number of recently inserted values.
     #[inline]
     pub fn recent_len(&self) -> usize {
         self.count_cold
     }
 
+    /// Returns the number of frequently fetched or updated values.
     #[inline]
     pub fn frequent_len(&self) -> usize {
         self.count_hot
     }
 
+    /// Returns the number of test entries.
     #[inline]
     pub fn test_len(&self) -> usize {
         self.count_test
     }
 
+    /// Returns how many values have been inserted into the cache overall.
     #[inline]
     pub fn inserted(&self) -> u64 {
         self.inserted
     }
 
+    /// Returns how many values have been evicted from the cache.
     #[inline]
     pub fn evicted(&self) -> u64 {
         self.evicted
     }
 
+    /// Get a mutable reference to the value in the cache mapped to by `key`.
+    ///
+    /// If no value exists for `key`, this returns `None`.
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
@@ -133,6 +156,9 @@ where
         Some(value)
     }
 
+    /// Get an immutable reference to the value in the cache mapped to by `key`.
+    ///
+    /// If no value exists for `key`, this returns `None`.
     pub fn get<Q: ?Sized>(&mut self, key: &Q) -> Option<&V>
     where
         Q: Hash + Eq,
@@ -145,6 +171,7 @@ where
         Some(value)
     }
 
+    /// Returns `true` if there is a value in the cache mapped to by `key`.
     pub fn contains_key<Q: ?Sized>(&mut self, key: &Q) -> bool
     where
         Q: Hash + Eq,
@@ -157,6 +184,10 @@ where
         }
     }
 
+    /// Map `key` to `value` in the cache, possibly evicting old entries.
+    ///
+    /// This method returns `true` when this is a new entry, and `false` if an existing entry was
+    /// updated.
     pub fn insert(&mut self, key: K, value: V) -> bool {
         let token = match self.map.get(&key).cloned() {
             None => {
@@ -185,6 +216,10 @@ where
         true
     }
 
+    /// Remove the cache entry mapped to by `key`.
+    ///
+    /// This method returns the value removed from the cache. If `key` did not map to any value,
+    /// then this returns `None`.
     pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
