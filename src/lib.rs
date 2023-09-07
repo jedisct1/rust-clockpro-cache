@@ -48,7 +48,7 @@ pub struct ClockProCache<K, V> {
     cold_capacity: usize,
     map: HashMap<K, Token>,
     ring: TokenRing,
-    slab: Vec<Node<K, V>>,
+    nodes: Vec<Node<K, V>>,
     hand_hot: Token,
     hand_cold: Token,
     hand_test: Token,
@@ -79,15 +79,15 @@ where
         if capacity < 3 {
             return Err("Cache size cannot be less than 3 entries");
         }
-        let mut slab = Vec::with_capacity(capacity + test_capacity);
-        slab.resize_with(capacity + test_capacity, Node::default);
+        let mut nodes = Vec::with_capacity(capacity + test_capacity);
+        nodes.resize_with(capacity + test_capacity, Node::default);
         let cache = ClockProCache {
             capacity,
             test_capacity,
             cold_capacity: capacity,
             map: HashMap::with_capacity(capacity + test_capacity),
             ring: TokenRing::with_capacity(capacity + test_capacity),
-            slab,
+            nodes,
             hand_hot: 0,
             hand_cold: 0,
             hand_test: 0,
@@ -151,7 +151,7 @@ where
         Q: Eq + Hash,
     {
         let token = *self.map.get(key)?;
-        let node = &mut self.slab[token];
+        let node = &mut self.nodes[token];
         let value = node.value.as_mut()?;
         node.node_type.insert(NodeType::REFERENCE);
         Some(value)
@@ -166,7 +166,7 @@ where
         K: Borrow<Q>,
     {
         let token = *self.map.get(key)?;
-        let node = &mut self.slab[token];
+        let node = &mut self.nodes[token];
         let value = &node.value.as_ref()?;
         node.node_type.insert(NodeType::REFERENCE);
         Some(value)
@@ -179,7 +179,7 @@ where
         K: Borrow<Q>,
     {
         if let Some(&token) = self.map.get(key) {
-            self.slab[token].value.is_some()
+            self.nodes[token].value.is_some()
         } else {
             false
         }
@@ -200,7 +200,7 @@ where
             Some(token) => token,
         };
         {
-            let mentry = &mut self.slab[token];
+            let mentry = &mut self.nodes[token];
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NodeType::REFERENCE);
@@ -227,7 +227,7 @@ where
         Q: Eq + Hash,
     {
         let token = *self.map.get(key)?;
-        let node = &mut self.slab[token];
+        let node = &mut self.nodes[token];
         let value = node.value.take();
 
         // The key is in map, so the node must be HOT or COLD
@@ -244,7 +244,7 @@ where
     fn meta_add(&mut self, key: K, value: V, node_type: NodeType) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
-        self.slab[token] = Node {
+        self.nodes[token] = Node {
             key: MaybeUninit::new(key.clone()),
             value: Some(value),
             node_type,
@@ -264,7 +264,7 @@ where
     fn run_hand_cold(&mut self) {
         let mut run_hand_test = false;
         {
-            let mentry = &mut self.slab[self.hand_cold];
+            let mentry = &mut self.nodes[self.hand_cold];
             if mentry.node_type.intersects(NodeType::COLD) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type = NodeType::HOT;
@@ -296,7 +296,7 @@ where
             self.run_hand_test();
         }
         {
-            let mentry = &mut self.slab[self.hand_hot];
+            let mentry = &mut self.nodes[self.hand_hot];
             if mentry.node_type.intersects(NodeType::HOT) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type.remove(NodeType::REFERENCE);
@@ -315,7 +315,7 @@ where
         if self.hand_test == self.hand_cold {
             self.run_hand_cold();
         }
-        if self.slab[self.hand_test]
+        if self.nodes[self.hand_test]
             .node_type
             .intersects(NodeType::TEST)
         {
@@ -333,7 +333,7 @@ where
 
     fn meta_del(&mut self, token: Token) {
         {
-            let mentry = &mut self.slab[token];
+            let mentry = &mut self.nodes[token];
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
