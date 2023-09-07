@@ -15,10 +15,10 @@ appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
 slab = "0.4"
-bitflags = "2.0"
+bitflags = "2.4"
 
 [dev-dependencies]
-criterion = "0.4"
+criterion = "0.5"
 rand = "0.8.5"
 rand_distr = "0.4.3"
 
