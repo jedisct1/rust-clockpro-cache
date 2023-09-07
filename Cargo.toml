@@ -16,7 +16,6 @@ appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 [dependencies]
 slab = "0.4"
 bitflags = "2.0"
-unsafe_unwrap = "0.1"
 
 [dev-dependencies]
 criterion = "0.4"

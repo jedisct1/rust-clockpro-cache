@@ -1,13 +1,17 @@
+//! This is an implementation of the [CLOCK-Pro cache] algorithm.
+//!
+//! CLOCK-Pro keeps track of recently referenced and recently evicted cache entries, which allows
+//! it to avoid the evictions that weak access patterns such as scan and loop typically induce in
+//! LRU and CLOCK.
+//!
+//! [CLOCK-Pro cache]: https://static.usenix.org/event/usenix05/tech/general/full_papers/jiang/jiang_html/html.html
 #[macro_use]
 extern crate bitflags;
-
-use unsafe_unwrap::UnsafeUnwrap;
 
 use crate::token_ring::{Token, TokenRing};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
 
 bitflags! {
     struct NodeType: u8 {
@@ -21,19 +25,29 @@ bitflags! {
 }
 
 struct Node<K, V> {
-    key: K,
+    key: Option<K>,
     value: Option<V>,
     node_type: NodeType,
-    phantom_k: PhantomData<K>,
 }
 
+impl<K, V> Default for Node<K, V> {
+    fn default() -> Self {
+        Node {
+            key: None,
+            value: None,
+            node_type: NodeType::EMPTY,
+        }
+    }
+}
+
+/// A CLOCK-Pro cache that maps keys to values.
 pub struct ClockProCache<K, V> {
     capacity: usize,
     test_capacity: usize,
     cold_capacity: usize,
     map: HashMap<K, Token>,
     ring: TokenRing,
-    slab: Vec<Option<Node<K, V>>>,
+    slab: Vec<Node<K, V>>,
     hand_hot: Token,
     hand_cold: Token,
     hand_test: Token,
@@ -42,17 +56,21 @@ pub struct ClockProCache<K, V> {
     count_test: usize,
     inserted: u64,
     evicted: u64,
-    phantom_k: PhantomData<K>,
 }
 
 impl<K, V> ClockProCache<K, V>
 where
     K: Eq + Hash + Clone,
 {
+    /// Create a new cache with the given capacity.
     pub fn new(capacity: usize) -> Result<Self, &'static str> {
         Self::new_with_test_capacity(capacity, capacity)
     }
 
+    /// Create a new cache with the given value and test capacities.
+    ///
+    /// The test capacity is used for tracking recently evicted entries, so that they will
+    /// be considered frequently used if they get reinserted.
     pub fn new_with_test_capacity(
         capacity: usize,
         test_capacity: usize,
@@ -61,9 +79,7 @@ where
             return Err("Cache size cannot be less than 3 entries");
         }
         let mut slab = Vec::with_capacity(capacity + test_capacity);
-        for _ in 0..capacity + test_capacity {
-            slab.push(None);
-        }
+        slab.resize_with(capacity + test_capacity, Node::default);
         let cache = ClockProCache {
             capacity,
             test_capacity,
@@ -79,98 +95,103 @@ where
             count_test: 0,
             inserted: 0,
             evicted: 0,
-            phantom_k: PhantomData,
         };
         Ok(cache)
     }
 
+    /// Returns the number of cached values.
     #[inline]
     pub fn len(&self) -> usize {
         self.count_cold + self.count_hot
     }
 
+    /// Returns `true` when no values are currently cached.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Returns the number of recently inserted values.
     #[inline]
     pub fn recent_len(&self) -> usize {
         self.count_cold
     }
 
+    /// Returns the number of frequently fetched or updated values.
     #[inline]
     pub fn frequent_len(&self) -> usize {
         self.count_hot
     }
 
+    /// Returns the number of test entries.
     #[inline]
     pub fn test_len(&self) -> usize {
         self.count_test
     }
 
+    /// Returns how many values have been inserted into the cache overall.
     #[inline]
     pub fn inserted(&self) -> u64 {
         self.inserted
     }
 
+    /// Returns how many values have been evicted from the cache.
     #[inline]
     pub fn evicted(&self) -> u64 {
         self.evicted
     }
 
+    /// Get a mutable reference to the value in the cache mapped to by `key`.
+    ///
+    /// If no value exists for `key`, this returns `None`.
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
     where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        node.value.as_ref()?;
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
+        let value = node.value.as_mut()?;
         node.node_type.insert(NodeType::REFERENCE);
-        Some(node.value.as_mut().unwrap())
+        Some(value)
     }
 
+    /// Get an immutable reference to the value in the cache mapped to by `key`.
+    ///
+    /// If no value exists for `key`, this returns `None`.
     pub fn get<Q: ?Sized>(&mut self, key: &Q) -> Option<&V>
     where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
-        node.value.as_ref()?;
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
+        let value = &node.value.as_ref()?;
         node.node_type.insert(NodeType::REFERENCE);
-        Some(node.value.as_ref().unwrap())
+        Some(value)
     }
 
+    /// Returns `true` if there is a value in the cache mapped to by `key`.
     pub fn contains_key<Q: ?Sized>(&mut self, key: &Q) -> bool
     where
         Q: Hash + Eq,
         K: Borrow<Q>,
     {
-        let token = match self.map.get(key) {
-            None => return false,
-            Some(&token) => token,
-        };
-        unsafe { self.slab[token].as_ref().unsafe_unwrap().value.is_some() }
+        if let Some(&token) = self.map.get(key) {
+            self.slab[token].value.is_some()
+        } else {
+            false
+        }
     }
 
+    /// Map `key` to `value` in the cache, possibly evicting old entries.
+    ///
+    /// This method returns `true` when this is a new entry, and `false` if an existing entry was
+    /// updated.
     pub fn insert(&mut self, key: K, value: V) -> bool {
         let token = match self.map.get(&key).cloned() {
             None => {
-                let node = Node {
-                    key,
-                    value: Some(value),
-                    node_type: NodeType::COLD,
-                    phantom_k: PhantomData,
-                };
-                self.meta_add(node);
+                self.meta_add(key, value, NodeType::COLD);
                 self.count_cold += 1;
                 self.inserted += 1;
                 return true;
@@ -178,7 +199,7 @@ where
             Some(token) => token,
         };
         {
-            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[token];
             if mentry.value.is_some() {
                 mentry.value = Some(value);
                 mentry.node_type.insert(NodeType::REFERENCE);
@@ -190,28 +211,22 @@ where
         }
         self.count_test -= 1;
         self.meta_del(token);
-        let node = Node {
-            key,
-            value: Some(value),
-            node_type: NodeType::HOT,
-            phantom_k: PhantomData,
-        };
-        self.meta_add(node);
+        self.meta_add(key, value, NodeType::HOT);
         self.count_hot += 1;
         true
     }
 
+    /// Remove the cache entry mapped to by `key`.
+    ///
+    /// This method returns the value removed from the cache. If `key` did not map to any value,
+    /// then this returns `None`.
     pub fn remove<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Eq + Hash,
     {
-        let token = match self.map.get(key) {
-            None => return None,
-            Some(&token) => token,
-        };
-
-        let node = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+        let token = *self.map.get(key)?;
+        let node = &mut self.slab[token];
         let value = node.value.take();
 
         // The key is in map, so the node must be HOT or COLD
@@ -225,14 +240,15 @@ where
         value
     }
 
-    fn meta_add(&mut self, node: Node<K, V>) {
+    fn meta_add(&mut self, key: K, value: V, node_type: NodeType) {
         self.evict();
         let token = self.ring.insert_after(self.hand_hot);
-        self.slab[token] = Some(node);
-        self.map.insert(
-            unsafe { self.slab[token].as_ref().unsafe_unwrap().key.clone() },
-            token,
-        );
+        self.slab[token] = Node {
+            key: Some(key.clone()),
+            value: Some(value),
+            node_type,
+        };
+        self.map.insert(key, token);
         if self.hand_cold == self.hand_hot {
             self.hand_cold = self.ring.prev_for_token(self.hand_cold);
         }
@@ -247,7 +263,7 @@ where
     fn run_hand_cold(&mut self) {
         let mut run_hand_test = false;
         {
-            let mentry = unsafe { self.slab[self.hand_cold].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[self.hand_cold];
             if mentry.node_type.intersects(NodeType::COLD) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type = NodeType::HOT;
@@ -279,7 +295,7 @@ where
             self.run_hand_test();
         }
         {
-            let mentry = unsafe { self.slab[self.hand_hot].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[self.hand_hot];
             if mentry.node_type.intersects(NodeType::HOT) {
                 if mentry.node_type.intersects(NodeType::REFERENCE) {
                     mentry.node_type.remove(NodeType::REFERENCE);
@@ -298,13 +314,10 @@ where
         if self.hand_test == self.hand_cold {
             self.run_hand_cold();
         }
-        if unsafe {
-            self.slab[self.hand_test]
-                .as_ref()
-                .unsafe_unwrap()
-                .node_type
-                .intersects(NodeType::TEST)
-        } {
+        if self.slab[self.hand_test]
+            .node_type
+            .intersects(NodeType::TEST)
+        {
             let prev = self.ring.prev_for_token(self.hand_test);
             let hand_test = self.hand_test;
             self.meta_del(hand_test);
@@ -319,11 +332,13 @@ where
 
     fn meta_del(&mut self, token: Token) {
         {
-            let mentry = unsafe { self.slab[token].as_mut().unsafe_unwrap() };
+            let mentry = &mut self.slab[token];
             mentry.node_type.remove(NodeType::MASK);
             mentry.node_type.insert(NodeType::EMPTY);
             mentry.value = None;
-            self.map.remove(&mentry.key);
+            if let Some(key) = &mentry.key {
+                self.map.remove(key);
+            }
         }
         if token == self.hand_hot {
             self.hand_hot = self.ring.prev_for_token(self.hand_hot);
@@ -542,5 +557,82 @@ mod tests {
         for i in 0..4 {
             assert_eq!(*cache.get(&i).unwrap(), i);
         }
+    }
+
+    #[test]
+    fn test_length_and_counters() {
+        let mut cache: ClockProCache<usize, usize> = ClockProCache::new(5).unwrap();
+
+        // Cache starts out empty.
+        assert_eq!(cache.is_empty(), true);
+
+        for i in 1..=5 {
+            // Cache length should increase with each new item.
+            assert!(cache.insert(i, i));
+            assert_eq!(cache.len(), i);
+        }
+
+        // Cache is no longer empty.
+        assert_eq!(cache.is_empty(), false);
+        assert_eq!(cache.inserted(), 5);
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 5);
+
+        // Cache length should be capped at capacity.
+        assert!(cache.insert(6, 6));
+        assert!(cache.insert(7, 7));
+
+        assert_eq!(cache.len(), 5);
+        assert_eq!(cache.inserted(), 7);
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 5);
+
+        // Reference the two recent values and insert new ones to run the hand
+        // and make the REFERENCED nodes HOT.
+        assert_eq!(cache.get(&6), Some(&6));
+        assert_eq!(cache.get(&7), Some(&7));
+
+        for i in 8..=15 {
+            assert!(cache.insert(i, i));
+        }
+
+        // Both 6 and 7 should be HOT and not have been evicted.
+        assert_eq!(cache.get(&6), Some(&6));
+        assert_eq!(cache.get(&7), Some(&7));
+
+        assert_eq!(cache.len(), 5);
+        assert_eq!(cache.inserted(), 15);
+        assert_eq!(cache.frequent_len(), 2);
+        assert_eq!(cache.recent_len(), 3);
+        assert_eq!(cache.test_len(), 5);
+
+        // Removing 6 and 15 should decrement HOT and COLD counters.
+        assert_eq!(cache.remove(&6), Some(6));
+        assert_eq!(cache.remove(&15), Some(15));
+        assert_eq!(cache.frequent_len(), 1);
+        assert_eq!(cache.recent_len(), 2);
+    }
+
+    #[test]
+    fn test_evicted_to_hot() {
+        let mut cache: ClockProCache<usize, usize> = ClockProCache::new_with_test_capacity(3, 30).unwrap();
+
+        // Insert test capacity items.
+        for i in 0..30 {
+            assert!(cache.insert(i, i));
+        }
+
+        assert_eq!(cache.frequent_len(), 0);
+        assert_eq!(cache.recent_len(), 3);
+        assert_eq!(cache.test_len(), 27);
+
+        // 10 should be evicted but still have a TEST node.
+        assert_eq!(cache.get(&10), None);
+
+        // Inserting 0 again should replace the TEST node w/ a HOT one.
+        assert!(cache.insert(10, 10));
+        assert_eq!(cache.frequent_len(), 1);
+        assert_eq!(cache.recent_len(), 2);
+        assert_eq!(cache.test_len(), 27);
     }
 }
