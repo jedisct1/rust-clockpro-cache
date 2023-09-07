@@ -10,7 +10,6 @@ categories = ["algorithms", "caching"]
 edition = "2018"
 
 [badges]
-travis-ci = { repository = "jedisct1/rust-clockpro-cache" }
 appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
