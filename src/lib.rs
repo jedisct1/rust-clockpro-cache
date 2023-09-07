@@ -368,7 +368,7 @@ where
 }
 
 mod token_ring {
-    use slab::Slab;
+    use slabigator::Slab;
 
     pub type Token = usize;
     const TOKEN_THUMBSTONE: Token = !0;
@@ -389,7 +389,7 @@ mod token_ring {
             if capacity < 1 {
                 panic!("A ring cannot have a capacity smaller than 1");
             }
-            let slab = Slab::with_capacity(capacity);
+            let slab = Slab::with_capacity(capacity).expect("requested capacity is too large");
             TokenRing {
                 head: TOKEN_THUMBSTONE,
                 tail: TOKEN_THUMBSTONE,
@@ -439,7 +439,7 @@ mod token_ring {
             }
             self.slab[token].prev = TOKEN_THUMBSTONE;
             self.slab[token].next = TOKEN_THUMBSTONE;
-            self.slab.remove(token);
+            self.slab.remove(token).expect("removed token not in slab");
         }
 
         pub fn insert_after(&mut self, to: Token) -> Token {
@@ -448,7 +448,7 @@ mod token_ring {
                     prev: TOKEN_THUMBSTONE,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab.insert(node);
+                let token = self.slab.push_front(node).expect("over capacity");
                 self.head = token;
                 self.tail = token;
                 return token;
@@ -461,7 +461,7 @@ mod token_ring {
                     prev: old_second,
                     next: TOKEN_THUMBSTONE,
                 };
-                let token = self.slab.insert(node);
+                let token = self.slab.push_front(node).expect("over capacity");
                 self.slab[old_second].next = token;
                 self.tail = token;
                 token
@@ -470,7 +470,7 @@ mod token_ring {
                     prev: old_second,
                     next: to,
                 };
-                let token = self.slab.insert(node);
+                let token = self.slab.push_front(node).expect("over capacity");
                 self.slab[old_second].next = token;
                 self.slab[to].prev = token;
                 token

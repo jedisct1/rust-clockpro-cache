@@ -14,7 +14,7 @@ travis-ci = { repository = "jedisct1/rust-clockpro-cache" }
 appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
-slab = "0.4"
+slabigator = { version = "0.9", features = ["slot_usize"] }
 bitflags = "2.4"
 
 [dev-dependencies]
