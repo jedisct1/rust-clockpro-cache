@@ -27,6 +27,5 @@ name = "criterion"
 harness = false
 
 [profile.release]
-lto = true
 panic = "abort"
 opt-level = 3
