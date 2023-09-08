@@ -1,7 +1,7 @@
 [package]
 name = "clockpro-cache"
 description = "CLOCK-Pro cache replacement policy"
-version = "0.1.11"
+version = "0.1.12"
 homepage = "https://github.com/jedisct1/rust-clockpro-cache"
 keywords = ["cache"]
 license = "MIT"
@@ -13,7 +13,7 @@ edition = "2018"
 appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
-slabigator = { version = "0.9", features = ["slot_usize"] }
+slabigator = { version = "0.9.1", features = ["slot_usize", "releasefast"] }
 bitflags = "2.4"
 
 [dev-dependencies]
