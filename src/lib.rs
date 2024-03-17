@@ -1,10 +1,5 @@
-//! This is an implementation of the [CLOCK-Pro cache] algorithm.
-//!
-//! CLOCK-Pro keeps track of recently referenced and recently evicted cache entries, which allows
-//! it to avoid the evictions that weak access patterns such as scan and loop typically induce in
-//! LRU and CLOCK.
-//!
-//! [CLOCK-Pro cache]: https://static.usenix.org/event/usenix05/tech/general/full_papers/jiang/jiang_html/html.html
+#![doc = include_str!("../README.md")]
+
 #[macro_use]
 extern crate bitflags;
 
