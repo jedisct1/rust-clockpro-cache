@@ -1,7 +1,7 @@
 [package]
 name = "clockpro-cache"
 description = "In-memory cache with CLOCK-Pro eviction, balancing recently and frequently accessed entries"
-version = "0.1.12"
+version = "0.1.13"
 homepage = "https://github.com/jedisct1/rust-clockpro-cache"
 keywords = ["cache", "caching", "clock-pro", "eviction", "replacement"]
 license = "MIT"
@@ -13,12 +13,12 @@ edition = "2018"
 appveyor = { repository = "jedisct1/rust-clockpro-cache" }
 
 [dependencies]
-slabigator = { version = "0.9.1", features = ["slot_usize", "releasefast"] }
-bitflags = "2.4"
+slabigator = { version = "0.9.6", features = ["slot_usize", "releasefast"] }
+bitflags = "2.13"
 
 [dev-dependencies]
 criterion = "0.5"
-rand = "0.8.5"
+rand = "0.8.8"
 rand_distr = "0.4.3"
 
 [[bench]]
