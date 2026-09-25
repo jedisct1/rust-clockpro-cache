@@ -1,9 +1,9 @@
 [package]
 name = "clockpro-cache"
-description = "CLOCK-Pro cache replacement policy"
+description = "In-memory cache with CLOCK-Pro eviction, balancing recently and frequently accessed entries"
 version = "0.1.12"
 homepage = "https://github.com/jedisct1/rust-clockpro-cache"
-keywords = ["cache"]
+keywords = ["cache", "caching", "clock-pro", "eviction", "replacement"]
 license = "MIT"
 authors = ["Frank Denis <github@pureftpd.org>"]
 categories = ["algorithms", "caching"]
